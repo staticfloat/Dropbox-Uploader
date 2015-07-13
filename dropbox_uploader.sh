@@ -214,12 +214,12 @@ function file_time
 {
     #Some embedded linux devices
     if [[ $OSTYPE == "linux-gnueabi" || $OSTYPE == "linux-gnu" ]]; then
-        stat -c "%y" "$1"
+        stat -c "%Y" "$1"
         return
 
     #Generic Unix
     elif [[ ${OSTYPE:0:5} == "linux" || $OSTYPE == "cygwin" || ${OSTYPE:0:7} == "solaris" ]]; then
-        stat --format="%y" "$1"
+        stat --format="%Y" "$1"
         return
 
     #BSD, OSX and other OSs
