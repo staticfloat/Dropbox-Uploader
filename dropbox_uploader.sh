@@ -498,7 +498,8 @@ function db_upload_file
           $basefile_dst == ".ds_store" || \
           $basefile_dst == "icon\r" || \
           $basefile_dst == ".dropbox" || \
-          $basefile_dst == ".dropbox.attr" \
+          $basefile_dst == ".dropbox.attr" || \
+          $basefile_dst == "._"* \
        ]]; then
         print " > Skipping not allowed file name \"$FILE_DST\"\n"
         return
