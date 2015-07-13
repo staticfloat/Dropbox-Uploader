@@ -374,9 +374,8 @@ function normalize_path
     fi
 }
 
-#Check if it's a file or directory
-#Returns FILE/DIR/ERR
-function db_stat
+# Checks if it's a file or directory, and returns the last time modified
+function db_stattime
 {
     local FILE=$(normalize_path "$1")
 
@@ -397,30 +396,28 @@ function db_stat
     if [[ $? == 0 && $IS_DELETED != "true" ]]; then
 
         local IS_DIR=$(sed -n 's/^\(.*\)\"contents":.\[.*/\1/p' "$RESPONSE_FILE")
+        local TIME=$(parsedate "$(sed -n 's/^.*"modified":."\([^"]*\)".*/\1/p' "$RESPONSE_FILE")")
 
         #It's a directory
         if [[ $IS_DIR != "" ]]; then
-            echo "DIR"
+            echo "DIR" $TIME
         #It's a file
         else
-            echo "FILE"
+            echo "FILE" $TIME
         fi
 
-    #Doesn't exists
+    #Doesn't exist
     else
         echo "ERR"
     fi
 }
 
-function db_time
+#Check if it's a file or directory
+#Returns FILE/DIR/ERR
+function db_stat
 {
-    local FILE=$(normalize_path "$1")
-
-    #Checking if it's a file or a directory
-    $CURL_BIN $CURL_ACCEPT_CERTIFICATES -s --show-error --globoff -i -o "$RESPONSE_FILE" "$API_METADATA_URL/$ACCESS_LEVEL/$(urlencode "$FILE")?oauth_consumer_key=$APPKEY&oauth_token=$OAUTH_ACCESS_TOKEN&oauth_signature_method=PLAINTEXT&oauth_signature=$APPSECRET%26$OAUTH_ACCESS_TOKEN_SECRET&oauth_timestamp=$(utime)&oauth_nonce=$RANDOM" 2> /dev/null
-    check_http_response
-
-    parsedate "$(sed -n 's/^.*"modified":."\([^"]*\)".*/\1/p' "$RESPONSE_FILE")"
+    local TYPE_TIME=($(db_stattime "$*"))
+    echo "${TYPE_TIME[0]}"
 }
 
 #Generic upload wrapper around db_upload_file and db_upload_dir functions
@@ -511,9 +508,10 @@ function db_upload_file
     FILE_SIZE=$(file_size "$FILE_SRC")
 
     #Checking if the file already exists
-    TYPE=$(db_stat "$FILE_DST")
-    if [[ $TYPE != "ERR" && $SKIP_EXISTING_FILES == 1 ]]; then
-        REMOTE_TIMESTAMP=$(db_time "$FILE_DST")
+    TYPE_TIME=($(db_stattime "$FILE_DST"))
+
+    if [[ ${TYPE_TIME}[0] != "ERR" && $SKIP_EXISTING_FILES == 1 ]]; then
+        REMOTE_TIMESTAMP=${TYPE_TIME[1]}
         LOCAL_TIMESTAMP=$(file_time "$FILE_SRC" "+%s")
         if (( REMOTE_TIMESTAMP >= LOCAL_TIMESTAMP )); then
             print " > Skipping already existing (unchanged) file \"$FILE_DST\"\n"
