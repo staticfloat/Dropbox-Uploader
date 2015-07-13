@@ -210,6 +210,38 @@ function file_size
     fi
 }
 
+function file_time
+{
+    #Some embedded linux devices
+    if [[ $OSTYPE == "linux-gnueabi" || $OSTYPE == "linux-gnu" ]]; then
+        stat -c "%y" "$1"
+        return
+
+    #Generic Unix
+    elif [[ ${OSTYPE:0:5} == "linux" || $OSTYPE == "cygwin" || ${OSTYPE:0:7} == "solaris" ]]; then
+        stat --format="%y" "$1"
+        return
+
+    #BSD, OSX and other OSs
+    else
+        stat -f "%m" "$1"
+        return
+    fi
+}
+
+function parsedate
+{
+    # Linux has the wonderful --date options for `date`
+    if [[ $OSTYPE == "linux-gnueabi" || $OSTYPE == "linux-gnu" || ${OSTYPE:0:5} == "linux" || $OSTYPE == "cygwin" || ${OSTYPE:0:7} == "solaris" ]]; then
+        date --date="$1" "+%s"
+        return
+    #BSD, OSX and other OS's........ do not
+    else
+        date -jf date -jf "%a, %e %b %Y %T %z" "$1" "+%s"
+        return
+    fi
+}
+
 #Usage
 function usage
 {
@@ -380,6 +412,17 @@ function db_stat
     fi
 }
 
+function db_time
+{
+    local FILE=$(normalize_path "$1")
+
+    #Checking if it's a file or a directory
+    $CURL_BIN $CURL_ACCEPT_CERTIFICATES -s --show-error --globoff -i -o "$RESPONSE_FILE" "$API_METADATA_URL/$ACCESS_LEVEL/$(urlencode "$FILE")?oauth_consumer_key=$APPKEY&oauth_token=$OAUTH_ACCESS_TOKEN&oauth_signature_method=PLAINTEXT&oauth_signature=$APPSECRET%26$OAUTH_ACCESS_TOKEN_SECRET&oauth_timestamp=$(utime)&oauth_nonce=$RANDOM" 2> /dev/null
+    check_http_response
+
+    parsedate "$(sed -n 's/^.*"modified":."\([^"]*\)".*/\1/p' "$RESPONSE_FILE")"
+}
+
 #Generic upload wrapper around db_upload_file and db_upload_dir functions
 #$1 = Local source file/dir
 #$2 = Remote destination file/dir
@@ -469,8 +512,12 @@ function db_upload_file
     #Checking if the file already exists
     TYPE=$(db_stat "$FILE_DST")
     if [[ $TYPE != "ERR" && $SKIP_EXISTING_FILES == 1 ]]; then
-        print " > Skipping already existing file \"$FILE_DST\"\n"
-        return
+        REMOTE_TIMESTAMP=$(db_time "$FILE_DST")
+        LOCAL_TIMESTAMP=$(file_time "$FILE_SRC" "+%s")
+        if (( REMOTE_TIMESTAMP >= LOCAL_TIMESTAMP )); then
+            print " > Skipping already existing (unchanged) file \"$FILE_DST\"\n"
+            return
+        fi
     fi
 
     if [[ $FILE_SIZE -gt 157286000 ]]; then
